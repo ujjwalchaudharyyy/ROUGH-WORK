@@ -1,0 +1,361 @@
+// DisplaceOS Unified Prisma Schema
+// Compatible with SQLite (for instant local zero-dependency runs) & PostgreSQL (production)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  fullName          String
+  phone             String?
+  role              String    @default("CITIZEN") // CITIZEN, RESCUE_TEAM, SHELTER_MANAGER, MEDICAL_RESPONDER, COMMAND_CENTER
+  organization      String?
+  preferredLanguage String    @default("en") // "en" or "hi"
+  status            String    @default("ACTIVE")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  citizenProfile    CitizenProfile?
+  rescueTeam        RescueTeam?       @relation("TeamLeader")
+  sheltersManaged   Shelter[]
+  reportedIncidents Incident[]        @relation("ReportedByUser")
+  verifiedIncidents Incident[]        @relation("VerifiedByUser")
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+}
+
+model CitizenProfile {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address            String?
+  emergencyContact   String?
+  medicalConditions  String?
+  accessibilityNeeds String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model RescueTeam {
+  id                 String    @id @default(uuid())
+  name               String
+  callSign           String    @unique
+  leaderId           String?   @unique
+  leader             User?     @relation("TeamLeader", fields: [leaderId], references: [id])
+  status             String    @default("AVAILABLE") // AVAILABLE, DISPATCHED, ON_SCENE, RESTING, UNAVAILABLE
+  currentLat         Float
+  currentLng         Float
+  lastLocationUpdate DateTime  @default(now())
+  capabilities       String    // comma-separated: "WATER_RESCUE,FIRST_AID,COLLAPSE_SEARCH,MEDICAL_TRANSPORT"
+  vehicleType        String    // "4x4_AMBULANCE", "RESCUE_BOAT", "HEAVY_RESCUE_TRUCK", "RAPID_SUV"
+  vehiclePlate       String
+  contactPhone       String
+  memberCount        Int       @default(4)
+  isSimulated        Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  missions           Mission[]
+}
+
+model Incident {
+  id                  String   @id @default(uuid())
+  incidentCode        String   @unique // e.g. "INC-2026-0042"
+  category            String   // FLOOD, EARTHQUAKE, LANDSLIDE, FIRE, BUILDING_COLLAPSE, MEDICAL_EMERGENCY, MISSING_PERSON, ROAD_BLOCKAGE, FOOD_WATER_SHORTAGE, EVACUATION_REQUEST, OTHER
+  title               String
+  description         String
+  latitude            Float
+  longitude           Float
+  address             String
+  affectedPeople      Int      @default(1)
+  injuredCount        Int      @default(0)
+  trappedCount        Int      @default(0)
+  requiredAssistance  String   // comma-separated: "MEDICAL,EVACUATION,FOOD_WATER,SHELTER"
+  accessibilityNeeds  String?
+  
+  // AI & Triage
+  priorityLevel       String   @default("P2") // P0, P1, P2, P3
+  priorityExplanation String?
+  aiAssessed          Boolean  @default(false)
+  aiConfidence        Float?   @default(0.85)
+  identifiedRisks     String?
+  suggestedActions    String?
+  isPriorityOverridden Boolean @default(false)
+  overrideReason      String?
+
+  // Status & Lifecycle: REPORTED -> VERIFIED -> PRIORITIZED -> ASSIGNED -> ACCEPTED -> EN_ROUTE -> ON_SCENE -> RESOLVED / CANCELLED
+  status              String   @default("REPORTED")
+  reporterId          String?
+  reporter            User?    @relation("ReportedByUser", fields: [reporterId], references: [id])
+  reporterName        String?
+  reporterContact     String?
+  verifiedById        String?
+  verifiedBy          User?    @relation("VerifiedByUser", fields: [verifiedById], references: [id])
+  verifiedAt          DateTime?
+  resolvedAt          DateTime?
+
+  isSimulated         Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  attachments         IncidentAttachment[]
+  statusHistory       IncidentStatusHistory[]
+  aiRecommendations   AIRecommendation[]
+  missions            Mission[]
+}
+
+model IncidentAttachment {
+  id         String   @id @default(uuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  fileUrl    String
+  fileType   String   // "IMAGE", "VIDEO", "DOCUMENT"
+  caption    String?
+  createdAt  DateTime @default(now())
+}
+
+model IncidentStatusHistory {
+  id             String   @id @default(uuid())
+  incidentId     String
+  incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  previousStatus String?
+  newStatus      String
+  changedById    String?
+  notes          String?
+  createdAt      DateTime @default(now())
+}
+
+model AIRecommendation {
+  id                  String   @id @default(uuid())
+  incidentId          String
+  incident            Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  recommendedPriority String   // P0, P1, P2, P3
+  explanation         String
+  identifiedRisks     String
+  suggestedActions    String
+  confidence          Float
+  missingInformation  String?
+  isOverridden        Boolean  @default(false)
+  overrideReason      String?
+  overriddenById      String?
+  createdAt           DateTime @default(now())
+}
+
+model Mission {
+  id                   String     @id @default(uuid())
+  incidentId           String
+  incident             Incident   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  teamId               String
+  team                 RescueTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  // Status: ASSIGNED, ACCEPTED, DECLINED, EN_ROUTE, ON_SCENE, COMPLETED, CANCELLED
+  status               String     @default("ASSIGNED")
+  assignedAt           DateTime   @default(now())
+  acceptedAt           DateTime?
+  arrivedAt            DateTime?
+  completedAt          DateTime?
+  declineReason        String?
+  dispatcherNotes      String?
+  responderNotes       String?
+  routeDistanceKm      Float?
+  estimatedDurationMin Float?
+  victimsAssisted      Int        @default(0)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  updates              MissionUpdate[]
+}
+
+model MissionUpdate {
+  id         String   @id @default(uuid())
+  missionId  String
+  mission    Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  status     String
+  updateText String
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime @default(now())
+}
+
+model Shelter {
+  id                String   @id @default(uuid())
+  code              String   @unique
+  name              String
+  address           String
+  latitude          Float
+  longitude         Float
+  shelterType       String   // "COMMUNITY_CENTER", "SCHOOL", "STADIUM", "TEMPORARY_CAMP", "HOSPITAL_ANNEX"
+  totalCapacity     Int
+  currentOccupancy  Int      @default(0)
+  status            String   @default("OPEN") // OPEN, LIMITED_CAPACITY, FULL, TEMPORARILY_CLOSED, NEEDS_SUPPLIES
+  hasDrinkingWater  Boolean  @default(true)
+  hasFood           Boolean  @default(true)
+  hasMedicalSupport Boolean  @default(false)
+  hasSanitation     Boolean  @default(true)
+  hasPower          Boolean  @default(true)
+  managerId         String?
+  manager           User?    @relation(fields: [managerId], references: [id])
+  contactPhone      String
+  lastVerifiedAt    DateTime @default(now())
+  isSimulated       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  registrations     ShelterRegistration[]
+  occupancyHistory  ShelterOccupancyRecord[]
+}
+
+model ShelterOccupancyRecord {
+  id         String   @id @default(uuid())
+  shelterId  String
+  shelter    Shelter  @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  occupancy  Int
+  recordedAt DateTime @default(now())
+  notes      String?
+}
+
+model ShelterRegistration {
+  id                 String    @id @default(uuid())
+  shelterId          String
+  shelter            Shelter   @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  citizenName        String
+  citizenPhone       String?
+  familyMembersCount Int       @default(1)
+  medicalNeeds       String?
+  checkInAt          DateTime  @default(now())
+  checkOutAt         DateTime?
+  status             String    @default("ACTIVE") // ACTIVE, CHECKED_OUT
+  notes              String?
+}
+
+model InventoryItem {
+  id              String   @id @default(uuid())
+  sku             String   @unique
+  name            String
+  category        String   // FOOD, WATER, MEDICAL, HYGIENE, SHELTER_EQUIPMENT, FUEL, BABY_CARE
+  quantity        Float    @default(0)
+  unit            String   // "PACKETS", "LITERS", "KITS", "BOXES", "UNITS"
+  minStockLevel   Float    @default(50)
+  storageLocation String   // "CENTRAL_DEPOT_A", "SECTOR_4_WAREHOUSE", "NORTH_STAGING_CAMP"
+  expiryDate      DateTime?
+  supplierOrDonor String?
+  lastUpdated     DateTime @default(now())
+  isSimulated     Boolean  @default(false)
+
+  transactions    InventoryTransaction[]
+}
+
+model InventoryTransaction {
+  id              String        @id @default(uuid())
+  itemId          String
+  item            InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  type            String        // RESTOCK, CONSUMPTION, DONATION, TRANSFER, ALLOCATION_TO_SHELTER
+  quantityChange  Float
+  remainingBalance Float
+  notes           String?
+  performedById   String?
+  createdAt       DateTime      @default(now())
+}
+
+model MissingPersonCase {
+  id                  String   @id @default(uuid())
+  caseCode            String   @unique // e.g. "MP-2026-0012"
+  fullName            String
+  age                 Int?
+  gender              String?  // MALE, FEMALE, OTHER
+  lastSeenLocation    String
+  lastSeenLat         Float?
+  lastSeenLng         Float?
+  lastSeenTime        DateTime?
+  physicalDescription String?
+  clothingDescription String?
+  photoUrl            String?
+  emergencyContact    String
+  reporterName        String
+  reporterPhone       String
+  reporterRelation    String   // PARENT, SPOUSE, SIBLING, FRIEND, COMMUNITY_MEMBER
+  status              String   @default("REPORTED") // REPORTED, INVESTIGATING, POTENTIAL_MATCH, LOCATED, CLOSED
+  verifiedAt          DateTime?
+  isSimulated         Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  updates             MissingPersonUpdate[]
+}
+
+model MissingPersonUpdate {
+  id           String            @id @default(uuid())
+  caseId       String
+  case         MissingPersonCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  updateText   String
+  reportedBy   String?
+  createdAt    DateTime          @default(now())
+}
+
+model HazardAlert {
+  id                 String   @id @default(uuid())
+  alertCode          String   @unique // e.g. "ALT-2026-0008"
+  title              String
+  category           String   // FLOOD_WARNING, FLASH_FLOOD, LANDSLIDE_RISK, CYCLONE, EARTHQUAKE_AFTERSHOCK, FIRE_ALERT, ROAD_CLOSURE, EVACUATION_ORDER
+  severity           String   @default("HIGH") // CRITICAL, HIGH, MODERATE, LOW
+  affectedArea       String
+  latitude           Float
+  longitude          Float
+  radiusKm           Float    @default(15.0)
+  startsAt           DateTime @default(now())
+  expiresAt          DateTime
+  issuingAuthority   String   @default("State Disaster Management Authority")
+  source             String   @default("OFFICIAL_FEEDS")
+  verificationStatus String   @default("OFFICIAL") // OFFICIAL, VERIFIED_FIELD, COMMUNITY_REPORT, SIMULATED
+  instructions       String
+  status             String   @default("PUBLISHED") // DRAFT, APPROVED, PUBLISHED, REVOKED
+  isSimulated        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model RoadBlockageReport {
+  id          String   @id @default(uuid())
+  locationName String
+  latitude    Float
+  longitude   Float
+  severity    String   @default("IMPASSABLE") // IMPASSABLE, PASSABLE_4X4_ONLY, PARTIALLY_BLOCKED
+  reason      String   // FLOOD_WATER, LANDSLIDE_DEBRIS, FALLEN_TREES, BRIDGE_DAMAGE, STRUCTURAL_CRACK
+  isVerified  Boolean  @default(false)
+  reportedBy  String?
+  notes       String?
+  isSimulated Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, CRITICAL, ASSIGNMENT, PRIORITY, SYSTEM
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  action        String   // "PRIORITY_OVERRIDE", "MISSION_ASSIGN", "ALERT_PUBLISH", "INVENTORY_MUTATION", "SHELTER_UPDATE", "USER_ROLE_CHANGE"
+  entityType    String   // INCIDENT, MISSION, ALERT, INVENTORY, SHELTER, USER
+  entityId      String
+  performedById String?
+  performedBy   User?    @relation(fields: [performedById], references: [id])
+  details       String   // JSON formatted string
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+}
