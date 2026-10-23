@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { UserRole } from '../../types';
@@ -24,8 +24,7 @@ import {
 } from 'lucide-react';
 
 export const DisplaceOSAuthPortal: React.FC = () => {
-  const navigate = useNavigate();
-  const { login, register } = useAuth();
+  const { login, demoLogin } = useAuth();
   const { t } = useLanguage();
 
   // Disaster scenarios for dynamic hero cycling
@@ -84,12 +83,13 @@ export const DisplaceOSAuthPortal: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Quick Demo Accounts
-  const demoAccounts = [
-    { role: 'Command Center (Admin)', email: 'commander@displaceos.org', icon: Shield, dest: '/command/dashboard', tag: 'Full EOC' },
-    { role: 'Rescue Team Leader', email: 'team.alpha@displaceos.org', icon: Users2, dest: '/responder/dashboard', tag: 'NDRF Fleet' },
-    { role: 'Shelter Manager', email: 'shelter.metro@displaceos.org', icon: Tent, dest: '/shelter/dashboard', tag: 'Relief Beds' },
-    { role: 'Affected Citizen', email: 'citizen.rahul@gmail.com', icon: User, dest: '/citizen/dashboard', tag: 'SOS Request' },
+  // Quick Demo Accounts — uses demoLogin(role) so nav is handled by AuthContext
+  const demoAccounts: { role: string; userRole: UserRole; icon: any; tag: string }[] = [
+    { role: 'Command Center', userRole: 'COMMAND_CENTER', icon: Shield, tag: 'Full EOC Access' },
+    { role: 'Rescue Team', userRole: 'RESCUE_TEAM', icon: Users2, tag: 'Field Responder' },
+    { role: 'Shelter Manager', userRole: 'SHELTER_MANAGER', icon: Tent, tag: 'Relief Shelter Ops' },
+    { role: 'Medical Team', userRole: 'MEDICAL_RESPONDER', icon: Radio, tag: 'Medical Response' },
+    { role: 'Citizen', userRole: 'CITIZEN', icon: User, tag: 'SOS & Alerts' },
   ];
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -97,11 +97,8 @@ export const DisplaceOSAuthPortal: React.FC = () => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
+      // login() in AuthContext now handles navigation automatically
       await login(email, password);
-      if (email.includes('commander')) navigate('/command/dashboard');
-      else if (email.includes('team')) navigate('/responder/dashboard');
-      else if (email.includes('shelter')) navigate('/shelter/dashboard');
-      else navigate('/citizen/dashboard');
     } catch (err: any) {
       setErrorMsg(err.message || 'Login failed. Please verify credentials.');
     } finally {
@@ -109,14 +106,14 @@ export const DisplaceOSAuthPortal: React.FC = () => {
     }
   };
 
-  const handleDirectDemoLogin = async (demoEmail: string, dest: string) => {
+  const handleDirectDemoLogin = async (role: UserRole) => {
     setIsLoading(true);
-    setEmail(demoEmail);
+    setErrorMsg(null);
     try {
-      await login(demoEmail, 'EmergencyPass2026!');
-      navigate(dest);
+      // demoLogin() in AuthContext handles navigation automatically
+      await demoLogin(role);
     } catch (err: any) {
-      setErrorMsg('Demo access failed.');
+      setErrorMsg('Demo access failed. Make sure the backend is running.');
     } finally {
       setIsLoading(false);
     }
@@ -167,12 +164,9 @@ export const DisplaceOSAuthPortal: React.FC = () => {
         </div>
 
         <div>
-          <Link
-            to="/command/dashboard"
-            className="px-3.5 py-1.5 rounded-full bg-[#171A24] border border-[#2B3042] text-xs font-heading tracking-wider uppercase text-cyan-300 hover:text-white transition"
-          >
-            4K EOC OVERVIEW →
-          </Link>
+          <span className="px-3.5 py-1.5 rounded-full bg-[#171A24] border border-[#2B3042] text-xs font-heading tracking-wider uppercase text-slate-400 select-none">
+            SECURE ACCESS PORTAL
+          </span>
         </div>
       </header>
 
@@ -186,18 +180,31 @@ export const DisplaceOSAuthPortal: React.FC = () => {
         {/* LEFT COLUMN: DYNAMIC DISASTER VISUALS & TELEMETRY */}
         <div className="lg:col-span-7 flex flex-col gap-4">
           
-          {/* Main Visual Display Frame */}
+          {/* Main Visual Display Frame with 4K Video Stream */}
           <div className="relative rounded-2xl overflow-hidden border border-[#222636] bg-[#0E1119] shadow-2xl h-[420px] sm:h-[460px] flex flex-col justify-between p-6 select-none transition-all duration-700">
             
-            {/* Background Disaster Image with smooth fade */}
-            <div className="absolute inset-0 z-0">
-              <img
-                src={currentScenario.image}
-                alt={currentScenario.name}
-                className="w-full h-full object-cover filter contrast-110 saturate-120 transition-all duration-700 transform scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0A0D15] via-[#0A0D15]/50 to-transparent"></div>
-              <div className="absolute inset-0 bg-gradient-to-r from-[#0A0D15]/80 via-transparent to-transparent"></div>
+            {/* 4K Background Disaster Video in Infinite Loop */}
+            <div className="absolute inset-0 z-0 overflow-hidden bg-black">
+              <video
+                key="4k-login-video"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="auto"
+                poster={currentScenario.image}
+                className="w-full h-full object-cover filter contrast-110 saturate-115 scale-100 transform"
+              >
+                <source src="/login.mp4" type="video/mp4" />
+                <source src="/login.mp4.mp4" type="video/mp4" />
+                <img
+                  src={currentScenario.image}
+                  alt={currentScenario.name}
+                  className="w-full h-full object-cover"
+                />
+              </video>
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0A0D15] via-[#0A0D15]/40 to-transparent pointer-events-none"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-[#0A0D15]/80 via-transparent to-transparent pointer-events-none"></div>
             </div>
 
             {/* Top Scene Badges */}
@@ -365,7 +372,7 @@ export const DisplaceOSAuthPortal: React.FC = () => {
                     <button
                       key={i}
                       type="button"
-                      onClick={() => handleDirectDemoLogin(acc.email, acc.dest)}
+                      onClick={() => handleDirectDemoLogin(acc.userRole)}
                       className="p-2 rounded-xl bg-[#141620] hover:bg-[#1D2130] border border-[#242838] hover:border-volt/50 text-left transition flex items-center gap-2 group cursor-pointer"
                     >
                       <Icon className="w-3.5 h-3.5 text-volt shrink-0" />

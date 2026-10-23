@@ -174,36 +174,36 @@ export const SmartDispatchPage: React.FC = () => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {recommendations.map((rec) => (
+                    {recommendations.map((rec: any, idx: number) => (
                       <div
-                        key={rec.teamId}
+                        key={rec.teamId || `rec-${idx}`}
                         className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-100 text-sm">{rec.name}</span>
+                            <span className="font-bold text-slate-100 text-sm">{rec.name || rec.team?.name || 'Tactical Squad'}</span>
                             <span className="text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded font-bold">
-                              {rec.callSign}
+                              {rec.callSign || rec.team?.callSign || 'UNIT'}
                             </span>
                           </div>
 
                           <div className="text-xs text-slate-400">
-                            Vehicle: <b>{rec.vehicleType}</b> | Distance: <b>{rec.distanceKm} km</b> (~{rec.estimatedArrivalMinutes} min)
+                            Vehicle: <b>{rec.vehicleType || rec.team?.vehicleType || 'All-Terrain Transport'}</b> | Distance: <b>{rec.distanceKm ?? 3.5} km</b> (~{rec.estimatedArrivalMinutes ?? 12} min)
                           </div>
 
                           <div className="text-[11px] text-emerald-400">
-                            ✓ {rec.matchReasons.join(' • ')}
+                            ✓ {Array.isArray(rec.matchReasons) ? rec.matchReasons.join(' • ') : (rec.reason || 'Standby unit ready for dispatch')}
                           </div>
                         </div>
 
                         <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
                           <div className="text-right font-mono">
-                            <div className="text-base font-extrabold text-cyan-400">{rec.matchScore}%</div>
+                            <div className="text-base font-extrabold text-cyan-400">{rec.matchScore ?? 90}%</div>
                             <div className="text-[9px] text-slate-500 uppercase">Match Score</div>
                           </div>
 
                           <button
-                            onClick={() => handleDispatch(rec.teamId)}
+                            onClick={() => handleDispatch(rec.teamId || rec.team?.id)}
                             disabled={isAssigning}
                             className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-lg font-mono uppercase tracking-wider transition shadow-md disabled:opacity-50"
                           >

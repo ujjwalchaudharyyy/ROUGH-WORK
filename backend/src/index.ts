@@ -22,11 +22,29 @@ import simulationRoutes from './routes/simulation';
 const app = express();
 
 // Middlewares
-app.use(cors({ origin: '*' }));
+// Allow configured origin(s) or all in dev
+const corsOrigins = (process.env.CORS_ORIGIN || '*').split(',').map((s) => s.trim());
+app.use(
+  cors({
+    origin: corsOrigins.length === 1 && corsOrigins[0] === '*' ? '*' : corsOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health Check
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ONLINE',
+    service: 'DisplaceOS Core Engine',
+    version: '1.0.0',
+    mode: 'EOC_ACTIVE',
+    railway: 'LIVE',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ONLINE',
